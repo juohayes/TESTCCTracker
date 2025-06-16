@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Combined Carton Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    nav {
+      display: flex;
+      background: #333;
+    }
+
+    nav button {
+      flex: 1;
+      padding: 1em;
+      background: #333;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+
+    nav button.active {
+      background: #555;
+    }
+
+    .tab {
+      display: none;
+      padding: 2em;
+    }
+
+    .tab.active {
+      display: block;
+    }
+
+    label {
+      display: block;
+      margin: 1em 0 0.5em;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.5em;
+    }
+
+    button.save, button.reset {
+      margin-top: 1em;
+      margin-right: 1em;
+      padding: 0.5em 1em;
+      cursor: pointer;
+      display: inline-block;
+    }
+
+    canvas {
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <button id="tab1Btn" class="active">Pallet Entry</button>
+    <button id="tab2Btn">High Counts</button>
+    <button id="tab3Btn">Chart</button>
+  </nav>
+
+  <div id="tab1" class="tab active">
+    <h2>Pallet Data Entry</h2>
+    <label>Average Cartons per Pallet:</label>
+    <input type="number" id="avgCartons">
+    <label>Number of Received Pallets:</label>
+    <input type="number" id="numPallets">
+    <label>Total Floor Loaded Count:</label>
+    <input type="number" id="floorLoaded">
+    <button class="save" onclick="savePalletData()">Save</button>
+    <button class="reset" onclick="resetPalletData()">Reset Pallet Data</button>
+  </div>
+
+  <div id="tab2" class="tab">
+    <h2>High Combined Carton Counts</h2>
+    <label>Monthly High:</label>
+    <input type="number" id="monthlyHigh">
+    <label>Weekly High:</label>
+    <input type="number" id="weeklyHigh">
+    <button class="save" onclick="saveHighs()">Save</button>
+  </div>
+
+  <div id="tab3" class="tab">
+    <h2>Combined Carton Count Chart</h2>
+    <canvas id="tickerChart" height="300"></canvas>
+    <button class="reset" onclick="resetAllData()">Reset All Data</button>
+  </div>
+
+  <script>
+    // Tabs
+    const tabs = {
+      tab1: document.getElementById('tab1'),
+      tab2: document.getElementById('tab2'),
+      tab3: document.getElementById('tab3'),
+    };
+
+    const buttons = {
+      tab1Btn: document.getElementById('tab1Btn'),
+      tab2Btn: document.getElementById('tab2Btn'),
+      tab3Btn: document.getElementById('tab3Btn'),
+    };
+
+    Object.keys(buttons).forEach(btnId => {
+      buttons[btnId].onclick = () => {
+        Object.values(buttons).forEach(btn => btn.classList.remove('active'));
+        Object.values(tabs).forEach(tab => tab.classList.remove('active'));
+        buttons[btnId].classList.add('active');
+        const tabId = btnId.replace('Btn', '');
+        tabs[tabId].classList.add('active');
+        if (tabId === 'tab3') {
+          updateChart();
+        }
+      };
+    });
+
+    // Save Pallet Data
+    function savePalletData() {
+      let avg = parseFloat(document.getElementById('avgCartons').value.trim());
+      let pallets = parseFloat(document.getElementById('numPallets').value.trim());
+      let floor = parseFloat(document.getElementById('floorLoaded').value.trim());
+      avg = isNaN(avg) ? 0 : avg;
+      pallets = isNaN(pallets) ? 0 : pallets;
+      floor = isNaN(floor) ? 0 : floor;
+      localStorage.setItem('avgCartons', avg);
+      localStorage.setItem('numPallets', pallets);
+      localStorage.setItem('floorLoaded', floor);
+      appendDataPoint();
+      alert("Pallet data saved!");
+    }
+
+    // Save Highs
+    function saveHighs() {
+      let monthly = parseFloat(document.getElementById('monthlyHigh').value);
+      let weekly = parseFloat(document.getElementById('weeklyHigh').value);
+      monthly = isNaN(monthly) ? 0 : monthly;
+      weekly = isNaN(weekly) ? 0 : weekly;
+      localStorage.setItem('monthlyHigh', monthly);
+      localStorage.setItem('weeklyHigh', weekly);
+      alert("High counts saved!");
+    }
+
+    // Append new data point
+    function appendDataPoint() {
+      let avg = parseFloat(localStorage.getItem('avgCartons')) || 0;
+      let pallets = parseFloat(localStorage.getItem('numPallets')) || 0;
+      let floor = parseFloat(localStorage.getItem('floorLoaded')) || 0;
+      const combined = avg * pallets + floor;
+      const timestamp = new Date().toISOString();
+      let series = JSON.parse(localStorage.getItem('timeSeries') || '[]');
+      series.push({ timestamp, combined });
+      localStorage.setItem('timeSeries', JSON.stringify(series));
+    }
+
+    // Chart
+    let chart;
+    function updateChart() {
+      const ctx = document.getElementById('tickerChart').getContext('2d');
+      const series = JSON.parse(localStorage.getItem('timeSeries') || '[]');
+      const labels = series.map(pt => new Date(pt.timestamp).toLocaleTimeString());
+      const data = series.map(pt => pt.combined);
+      const monthlyHigh = parseFloat(localStorage.getItem('monthlyHigh')) || 0;
+      const weeklyHigh = parseFloat(localStorage.getItem('weeklyHigh')) || 0;
+      if (chart) {
+        chart.destroy();
+      }
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Combined Cartons',
+              data: data,
+              borderColor: 'blue',
+              fill: false,
+            },
+            {
+              label: 'Monthly High',
+              data: data.map(() => monthlyHigh),
+              borderColor: 'green',
+              borderDash: [5, 5],
+              fill: false,
+            },
+            {
+              label: 'Weekly High',
+              data: data.map(() => weeklyHigh),
+              borderColor: 'red',
+              borderDash: [5, 5],
+              fill: false,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          animation: false,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // Interval
+    let autoAppendInterval = setInterval(autoAppend, 10000);
+    function autoAppend() {
+      appendDataPoint();
+      if (tabs.tab3.classList.contains('active')) {
+        updateChart();
+      }
+    }
+
+    // Correct: clear storage + destroy + rebuild empty chart + do NOT immediately re-append!
+
+function resetPalletData() {
+  if (confirm("Reset pallet data and chart?")) {
+    clearInterval(autoAppendInterval);
+
+    // Clear only pallet keys
+    localStorage.removeItem('avgCartons');
+    localStorage.removeItem('numPallets');
+    localStorage.removeItem('floorLoaded');
+    localStorage.removeItem('timeSeries');
+
+    // Clear inputs
+    document.getElementById('avgCartons').value = '';
+    document.getElementById('numPallets').value = '';
+    document.getElementById('floorLoaded').value = '';
+
+    // Destroy chart & clear canvas
+    if (chart) {
+      chart.destroy();
+      chart = null;
+    }
+    const ctx = document.getElementById('tickerChart').getContext('2d');
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    // Rebuild chart empty: timeSeries is gone
+    updateChart();
+
+    // ✅ Do NOT immediately re-append: just restart interval for next cycle
+    autoAppendInterval = setInterval(autoAppend, 10000);
+
+    alert("Pallet data and chart reset!");
+  }
+}
+
+function resetAllData() {
+  if (confirm("Reset ALL data, highs and chart?")) {
+    clearInterval(autoAppendInterval);
+
+    // Clear all storage
+    localStorage.clear();
+
+    // Clear all inputs
+    document.getElementById('avgCartons').value = '';
+    document.getElementById('numPallets').value = '';
+    document.getElementById('floorLoaded').value = '';
+    document.getElementById('monthlyHigh').value = '';
+    document.getElementById('weeklyHigh').value = '';
+
+    // Destroy chart & clear canvas
+    if (chart) {
+      chart.destroy();
+      chart = null;
+    }
+    const ctx = document.getElementById('tickerChart').getContext('2d');
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    // Rebuild chart empty
+    updateChart();
+
+    // Restart auto append for next cycle (won't add until user saves again)
+    autoAppendInterval = setInterval(autoAppend, 10000);
+
+    alert("All data fully reset!");
+  }
+}
+
+
+    // Initial chart update
+    updateChart();
+  </script>
+</body>
+</html>
